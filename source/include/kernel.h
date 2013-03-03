@@ -4,6 +4,9 @@
 #define KERNEL_VERSION  "0.1.0"
 
 #include <types.h>
+#include <arch.h>
+#include <multiboot.h>
+#include <memory.h>
 
 #define ASSERT()
 #define PANIC(m)
@@ -29,7 +32,7 @@ inline void outls(const uint32_t* buffer, size_t count, uint16_t port);
 // Console
 /******************/
 
-void console_init();
+void init_console();
 void console_puts(char *txt);
 void console_clear();
 

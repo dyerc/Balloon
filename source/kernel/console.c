@@ -103,7 +103,7 @@ void console_puts(char *txt)
   }
 }
 
-void console_init()
+void init_console()
 {
   console_clear();
 }

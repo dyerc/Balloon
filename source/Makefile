@@ -17,7 +17,7 @@ NASMFLAGS=-felf
 all: $(C_OBJ) $(ASM_OBJ) link clean iso
 
 qemu:
-	@qemu-system-i386 -cdrom $(ISO_FILE)
+	@qemu-system-i386 -cdrom $(ISO_FILE) -m 32
 
 iso:
 	@cp $(KERNEL_FILE) $(FS_ROOT)/boot/kernel
