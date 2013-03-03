@@ -8,6 +8,8 @@
 #define ASSERT()
 #define PANIC(m)
 
+void kprintf(const char *msg, ...);
+
 /******************/
 // IO
 /******************/
