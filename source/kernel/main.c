@@ -1,6 +1,7 @@
-
+#include <kernel.h>
 
 int kernel_main(void* p)
 {
-  return 0xba110017;
+  console_init();
+  console_puts("Hello World!");
 }

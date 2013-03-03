@@ -5,6 +5,9 @@
 
 #include <types.h>
 
+#define ASSERT()
+#define PANIC(m)
+
 /******************/
 // IO
 /******************/
@@ -24,6 +27,8 @@ inline void outls(const uint32_t* buffer, size_t count, uint16_t port);
 // Console
 /******************/
 
-
+void console_init();
+void console_puts(char *txt);
+void console_clear();
 
 #endif
