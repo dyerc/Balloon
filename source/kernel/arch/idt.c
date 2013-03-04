@@ -127,8 +127,6 @@ void irq_handler(registers_t *regs)
 
   outb(0x20, 0x20);
 
-  kprintf("i");
-
   if (interrupt_handlers[regs->int_no] != 0)
     interrupt_handlers[regs->int_no](regs);
 }

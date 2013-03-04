@@ -1,5 +1,7 @@
 #include <kernel.h>
 
+elf_t kernel_elf;
+
 int kernel_main(multiboot_t *mb)
 {
   init_gdt();
@@ -7,17 +9,19 @@ int kernel_main(multiboot_t *mb)
 
   init_console();
 
-  init_timer(20);
+  //init_timer(20);
 
-  uint32_t a = kmalloc(64);
-  uint32_t b = kmalloc(64);
-  uint32_t c = kmalloc(128);
+  kernel_elf = elf_from_multiboot(mb);
 
-  kprintf("1: %x\n", a);
-  kprintf("2: %x\n", b);
-  kprintf("3: %x\n", c);
+  // Init memory manager
+  init_paging();
 
   asm volatile("sti");
 
-  //asm volatile ("int $0x4");
+  uint32_t *ptr = (uint32_t*)0xA000000;
+  uint32_t do_fault = *ptr;
+
+  for(;;);
+
+  return 0xba110017;
 }

@@ -7,11 +7,13 @@
 #include <arch.h>
 #include <multiboot.h>
 #include <memory.h>
+#include <elf.h>
 
 #define ASSERT()
-#define PANIC(m)
+#define PANIC(m)    panic(m);
 
 void kprintf(const char *msg, ...);
+void kprint_stacktrace();
 
 /******************/
 // IO
