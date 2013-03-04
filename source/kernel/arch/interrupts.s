@@ -1,3 +1,5 @@
+
+
 global idt_flush:function idt_flush.end-idt_flush ; Allows the C code to call idt_flush().
 idt_flush:
     mov eax, [esp+4]  ; Get the pointer to the IDT, passed as a parameter.
@@ -5,8 +7,6 @@ idt_flush:
     ret
 .end:
 
-; This macro creates a stub for an ISR which does NOT pass it's own
-; error code (adds a dummy errcode byte).
 %macro ISR_NOERRCODE 1
   global isr%1
   isr%1:
@@ -63,35 +63,39 @@ ISR_NOERRCODE 255
 ; C function in idt.c
 extern idt_handler
 
-global isr_common_stub
+global isr_common_stub:function isr_common_stub.end-isr_common_stub
 
 ; This is our common ISR stub. It saves the processor state, sets
 ; up for kernel mode segments, calls the C-level fault handler,
 ; and finally restores the stack frame.
 isr_common_stub:
-  pusha
-  push ds
-  push es
-  push fs
-  push gs
-  mov ax, 0x10
-  mov ds, ax
-  mov es, ax
-  mov fs, ax
-  mov gs, ax
-  mov eax, esp
-  push eax
-  ; Call the C kernel fault handler
-  mov eax, idt_handler
-  call eax
-  pop eax
-  pop gs
-  pop fs
-  pop es
-  pop ds
-  popa
-  add esp, 8
-  iret
+    pusha                    ; Pushes edi,esi,ebp,esp,ebx,edx,ecx,eax
+
+    mov ax, ds               ; Lower 16-bits of eax = ds.
+    push eax                 ; Save the data segment descriptor
+
+    mov ax, 0x10             ; Load the kernel data segment descriptor
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    push esp           ; Push a pointer to the current top of stack - this becomes the registers_t* parameter.
+    call idt_handler         ; Call into our C code.
+    add esp, 4         ; Remove the registers_t* parameter.
+
+    pop ebx                  ; Reload the original data segment descriptor
+    mov ds, bx
+    mov es, bx
+    mov fs, bx
+    mov gs, bx
+    mov ss, bx
+
+    popa                     ; Pops edi,esi,ebp...
+    add esp, 8               ; Cleans up the pushed error code and pushed ISR number
+    iret                     ; pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
+.end:
 
 
 ; This macro creates a stub for an IRQ - the first parameter is
@@ -158,3 +162,4 @@ irq_common_stub:
     add esp, 8               ; Cleans up the pushed error code and pushed ISR number
     iret                     ; pops 5 things at once: CS, EIP, EFLAGS, SS, and ESP
 .end:
+

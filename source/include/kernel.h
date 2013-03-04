@@ -36,4 +36,6 @@ void init_console();
 void console_puts(char *txt);
 void console_clear();
 
+void init_timer(uint32_t freq);
+
 #endif
