@@ -18,3 +18,8 @@
 
 # Other
 *.DS_Store
+
+# Build output
+root/boot/kernel
+build/kernel
+build/balloon.iso

@@ -19,12 +19,16 @@ int kernel_main(multiboot_t *mb)
 
   asm volatile("sti");
 
-  void *a = kmalloc(32);
-  void *b = kmalloc(32);
-  void *c = kmalloc(32);
+  void *a = malloc(32);
+  void *b = malloc(32);
+  void *c = malloc(32);
   kprintf("kmalloced a= %x\n", (uint32_t)a);
   kprintf("kmalloced b= %x\n", (uint32_t)b);
   kprintf("kmalloced c= %x\n", (uint32_t)c);
+
+  free(b);
+  b = malloc(32);
+  kprintf("kmalloced b= %x\n", (uint32_t)b);
 
   for(;;);
 

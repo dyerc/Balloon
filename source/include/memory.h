@@ -4,6 +4,8 @@
 #define KHEAP_START         0xC0000000
 #define KHEAP_INITIAL_SIZE  0x100000
 
+#define KHEAP_END   0x02000000
+
 // Heap
 
 typedef struct chunk
@@ -81,5 +83,11 @@ void* kmalloc_raw(size_t size, int align, uint32_t *phys);
 void* kmalloc_aligned(size_t size);
 void* kmalloc_physical(size_t size, uint32_t *phys);
 void* kmalloc_aligned_physical(size_t size, uint32_t *phys);
+
+void * __attribute__ ((malloc)) malloc(size_t size);
+void * __attribute__ ((malloc)) realloc(void *ptr, size_t size);
+void * __attribute__ ((malloc)) calloc(size_t nmemb, size_t size);
+void * __attribute__ ((malloc)) valloc(size_t size);
+void free(void *ptr);
 
 #endif

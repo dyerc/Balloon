@@ -4,6 +4,7 @@ uint32_t *frames; // <-- bitset of whether each 4kb chunk of physical memory is 
 uint32_t nframes; // <-- number of 4kb chunks of physical memory
 
 extern uint32_t placement_pointer;
+extern uint32_t heap_end;
 
 page_directory_t* kernel_directory = 0;
 page_directory_t *current_directory = 0;
@@ -109,8 +110,8 @@ void init_paging()
     i += 0x1000;
   }
 
-  for (i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000)
-    alloc_frame(get_page(i, 1, kernel_directory), 0, 0);
+  for (i = placement_pointer; i < KHEAP_END; i += 0x1000)
+    alloc_frame(get_page(i, 1, kernel_directory), 1, 0);
 
   register_interrupt_handler(14, &page_fault);
 
@@ -165,4 +166,12 @@ void page_fault(registers_t *r)
 
   //PANIC("");
   for(;;);
+}
+
+void* sbrk(uint32_t increment)
+{
+  uint32_t address = heap_end;
+  heap_end += increment;
+  memset((void*)address, 0x0, increment);
+  return (void*)address;
 }

@@ -10,6 +10,9 @@
 #include <elf.h>
 
 #define ASSERT(b) ((b) ? (void)0 : panic_assert(__FILE__, __LINE__, #b))
+#define assert(b)
+#define spin_lock(f)
+#define spin_unlock(f)
 #define PANIC(m)    panic(m);
 
 void kprintf(const char *msg, ...);
