@@ -1,14 +1,17 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
+#define KHEAP_START         0xC0000000
+#define KHEAP_INITIAL_SIZE  0x100000
+
 // Heap
 
 typedef struct chunk
 {
   uint32_t magic;
   struct chunk *next, *prev;
-  uint32_t allocated : 1;
-  uint32_t size : 31;
+  uint8_t allocated;
+  uint32_t size;
 
 } chunk_t;
 
@@ -24,14 +27,18 @@ typedef struct
 typedef struct
 {
   chunk_t *first;
-  uint32_t start_addr;
-  uint32_t end_address;
-  uint32_t max_address;
+  uint32_t start;
+  uint32_t end;
+  uint32_t max;
 
 } heap_t;
 
 void* kmalloc(size_t size);
 void kfree(void* p);
+
+void* alloc(size_t size, uint8_t page_align, heap_t *heap);
+
+void init_heap();
 
 // Paging
 

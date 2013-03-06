@@ -107,7 +107,7 @@ void itoa(int32_t n, char* s)
 
 void i2hex(uint32_t val, char* dest, int32_t len)
 {
-    char* cp;
+    /*char* cp;
     char  x;
     uint32_t n;
     n = val;
@@ -118,7 +118,42 @@ void i2hex(uint32_t val, char* dest, int32_t len)
         n >>= 4;
         *--cp = x + ((x > 9) ? 'A' - 10 : '0');
     }
-    dest[len]  ='\0';
+    dest[len]  ='\0';*/
+
+    uint32_t n = val;
+    int32_t tmp;
+    char noZeroes = 1;
+
+    int i, j = 0;
+    for (i = 28; i > 0; i -= 4, j++)
+    {
+        tmp = (n >> i) & 0xF;
+        if (tmp == 0 && noZeroes != 0)
+        {
+            continue;
+        }
+
+        if (tmp >= 0xA)
+        {
+            noZeroes = 0;
+            dest[j] = (tmp-0xA+'a' );
+        }
+        else
+        {
+            noZeroes = 0;
+            dest[j] = ( tmp+'0' );
+        }
+    }
+
+    tmp = n & 0xF;
+    if (tmp >= 0xA)
+    {
+        dest[j] = (tmp-0xA+'a');
+    }
+    else
+    {
+        dest[j] = (tmp+'0');
+    }
 }
 
 float atof(const char* s)

@@ -6,7 +6,7 @@ extern uint32_t end;
 chunk_t *first_chunk = 0;
 uint32_t placement_pointer = (uint32_t)&end;
 
-
+heap_t *kernel_heap = 0;
 
 void* kmalloc(size_t size)
 {
@@ -15,9 +15,9 @@ void* kmalloc(size_t size)
 
 void* kmalloc_raw(size_t size, int align, uint32_t *phys)
 {
-  if (0)
+  if (kernel_heap != 0)
   {
-
+    return alloc(size, align, kernel_heap);
   }
   else
   {
@@ -58,16 +58,93 @@ void kfree(void* p)
 
 }
 
-void heap_install()
+void init_heap()
 {
-  // Create heap_t
+  heap_t* heap = (heap_t*)kmalloc(sizeof(heap_t));
+  uint32_t start = KHEAP_START;
 
-  // Create one large chunk of entire heap size
+  //ASSERT(start % 0x1000 == 0); // start = 0xC0000000
+  //ASSERT(); // initial size = 0x100000
+
+  if (start & 0xFFFFF000 != 0)
+  {
+    start &= 0xFFFFF000;
+    start += 0x1000;
+  }
+
+  heap->start = start;
+  heap->end = heap->start + KHEAP_INITIAL_SIZE;
+  heap->max = heap->end + KHEAP_INITIAL_SIZE;
+  //heap->supervisor = 0;
+  //heap->readonly = 0;
+
+  chunk_t* chunk = (chunk_t*)heap->start;
+  chunk->size = heap->end - heap->start;
+  chunk->magic = HEAP_MAGIC;
+  chunk->next = chunk->prev = 0;
+  chunk->allocated = 0;
+
+  heap->first = chunk;
+
+  kernel_heap = heap;
+}
+
+chunk_t* find_closest_chunk(uint32_t size, uint8_t page_align, heap_t *heap)
+{
+  chunk_t *current_chunk = heap->first;
+  while(current_chunk)
+  {
+    if (current_chunk->allocated != 0)
+    {
+      current_chunk = current_chunk->next;
+      continue;
+    }
+
+    if (page_align)
+    {
+
+    }
+    else
+    {
+      if (current_chunk->size >= size)
+        break;
+    }
+
+    current_chunk = current_chunk->next;
+  }
+
+  return current_chunk;
 }
 
 void* alloc(size_t size, uint8_t page_align, heap_t *heap)
 {
   // Find smallest chunk that will fit size
+  uint32_t required_size = size + sizeof(chunk_t);
+  chunk_t* chunk = find_closest_chunk(required_size, page_align, heap);
+
+  if (chunk)
+  {
+    if (chunk->size > required_size + sizeof(chunk_t)) // Do we have the space for a whole new chunk?
+    {
+      // We need to create a new chunk
+      chunk_t *nextchunk = chunk + required_size;
+      nextchunk->allocated = 0;
+      nextchunk->size = chunk->size - required_size;
+      nextchunk->prev = chunk;
+      chunk->next = nextchunk;
+      nextchunk->next = 0;
+      nextchunk->magic = HEAP_MAGIC;
+    }
+
+    //ASSERT(chunk->magic == HEAP_MAGIC);
+    chunk->allocated = 1;
+
+    return (chunk + sizeof(chunk_t));
+  }
+  else
+  {
+    return 0;
+  }
 
   // No such chunk, expand heap to allow this
 

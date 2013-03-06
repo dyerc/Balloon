@@ -9,17 +9,22 @@ int kernel_main(multiboot_t *mb)
 
   init_console();
 
-  //init_timer(20);
+  init_timer(20);
 
   kernel_elf = elf_from_multiboot(mb);
 
   // Init memory manager
   init_paging();
+  init_heap();
 
   asm volatile("sti");
 
-  uint32_t *ptr = (uint32_t*)0xA000000;
-  uint32_t do_fault = *ptr;
+  void *a = kmalloc(32);
+  void *b = kmalloc(32);
+  void *c = kmalloc(32);
+  kprintf("kmalloced a= %x\n", (uint32_t)a);
+  kprintf("kmalloced b= %x\n", (uint32_t)b);
+  kprintf("kmalloced c= %x\n", (uint32_t)c);
 
   for(;;);
 

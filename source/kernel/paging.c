@@ -99,11 +99,18 @@ void init_paging()
   current_directory = kernel_directory;
 
   int i = 0;
-  while(i < placement_pointer)
+  for (i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000)
+    get_page(i, 1, kernel_directory);
+
+  i = 0;
+  while(i < placement_pointer + 0x1000)
   {
     alloc_frame(get_page(i, 1, kernel_directory), 0, 0);
     i += 0x1000;
   }
+
+  for (i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000)
+    alloc_frame(get_page(i, 1, kernel_directory), 0, 0);
 
   register_interrupt_handler(14, &page_fault);
 
@@ -145,7 +152,16 @@ void page_fault(registers_t *r)
   uint32_t cr2;
   asm volatile ("mov %%cr2, %0" : "=r" (cr2));
 
-  kprintf("Page fault at %d, faulting address %d", r->eip, cr2);
+  int present   = !(r->err_code & 0x1); // Page not present
+  int rw = r->err_code & 0x2;           // Write operation?
+  int us = r->err_code & 0x4;           // Processor was in user-mode?
+  int reserved = r->err_code & 0x8;     // Overwritten CPU-reserved bits of page entry?
+  int id = r->err_code & 0x10;
+
+  kprintf("Page fault at 0x%x, faulting address 0x%x", r->eip, cr2);
+  kprintf("present: %d\nrw: %d\nus: %d\nreserved: %d\n", present, rw, us, reserved);
+
+  ///kprint_stacktrace();
 
   //PANIC("");
   for(;;);

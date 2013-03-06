@@ -9,7 +9,7 @@
 #include <memory.h>
 #include <elf.h>
 
-#define ASSERT()
+#define ASSERT(b) ((b) ? (void)0 : panic_assert(__FILE__, __LINE__, #b))
 #define PANIC(m)    panic(m);
 
 void kprintf(const char *msg, ...);
@@ -37,6 +37,7 @@ inline void outls(const uint32_t* buffer, size_t count, uint16_t port);
 void init_console();
 void console_puts(char *txt);
 void console_clear();
+void console_putchar(char c);
 
 void init_timer(uint32_t freq);
 
