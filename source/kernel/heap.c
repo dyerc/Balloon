@@ -96,7 +96,107 @@ void init_heap()
 }
 
 
-
+/*
+ * Kevin Lange's Slab Allocator
+ *
+ * Implemented for CS241, Fall 2010, machine problem 7
+ * at the University of Illinois, Urbana-Champaign.
+ *
+ * Overall competition winner for speed.
+ * Well ranked in memory usage.
+ *
+ * Copyright (c) 2010 Kevin Lange.  All rights reserved.
+ *
+ * Developed by: Kevin Lange <lange7@acm.uiuc.edu>
+ *               Dave Majnemer <dmajnem2@acm.uiuc.edu>
+ *               Assocation for Computing Machinery
+ *               University of Illinois, Urbana-Champaign
+ *               http://acm.uiuc.edu
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal with the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *   1. Redistributions of source code must retain the above copyright notice,
+ *      this list of conditions and the following disclaimers.
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimers in the
+ *      documentation and/or other materials provided with the distribution.
+ *   3. Neither the names of the Association for Computing Machinery, the
+ *      University of Illinois, nor the names of its contributors may be used
+ *      to endorse or promote products derived from this Software without
+ *      specific prior written permission.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+ * CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * WITH THE SOFTWARE.
+ *
+ * ##########
+ * # README #
+ * ##########
+ *
+ * About the slab allocator
+ * """"""""""""""""""""""""
+ *
+ * This is a simple implementation of a "slab" allocator. It works by operating
+ * on "bins" of items of predefined sizes and a set of pseudo-bins of any size.
+ * When a new allocation request is made, the allocator determines if it will
+ * fit in an existing bin. If there are no bins of the correct size for a given
+ * allocation request, the allocator will make a bin and add it to a(n empty)
+ * list of available bins of that size. In this implementation, we use sizes
+ * from 4 bytes (32 bit) or 8 bytes (64-bit) to 2KB for bins, fitting a 4K page
+ * size. The implementation allows the number of pages in a single bin to be
+ * increased, as well as allowing for changing the size of page (though this
+ * should, for the most part, remain 4KB under any modern system).
+ *
+ * Special thanks
+ * """"""""""""""
+ *
+ * I would like to thank Dave Majnemer, who I have credited above as a
+ * contributor, for his assistance. Without Dave, klmalloc would be a mash
+ * up of bits of forward movement in no discernible pattern. Dave helped
+ * me ensure that I could build a proper slab allocator and has consantly
+ * derided me for not fixing the bugs and to-do items listed in the last
+ * section of this readme.
+ *
+ * GCC Function Attributes
+ * """""""""""""""""""""""
+ *
+ * A couple of GCC function attributes, designated by the __attribute__
+ * directive, are used in this code to streamline optimization.
+ * I've chosen to include a brief overview of the particular attributes
+ * I am making use of:
+ *
+ * - malloc:
+ *   Tells gcc that a given function is a memory allocator
+ *   and that non-NULL values it returns should never be
+ *   associated with other chunks of memory. We use this for
+ *   alloc, realloc and calloc, as is requested in the gcc
+ *   documentation for the attribute.
+ *
+ * - always_inline:
+ *   Tells gcc to always inline the given code, regardless of the
+ *   optmization level. Small functions that would be noticeably
+ *   slower with the overhead of paramter handling are given
+ *   this attribute.
+ *
+ * - pure:
+ *   Tells gcc that a function only uses inputs and its output.
+ *
+ * Things to work on
+ * """""""""""""""""
+ *
+ * TODO: Try to be more consistent on comment widths...
+ * FIXME: Make thread safe! Not necessary for competition, but would be nice.
+ * FIXME: Splitting/coalescing is broken. Fix this ASAP!
+ *
+**/
 
 #define NUM_BINS 11U                /* Number of bins, total, under 32-bit. */
 #define SMALLEST_BIN_LOG 2U             /* Logarithm base two of the smallest bin: log_2(sizeof(int32)). */
