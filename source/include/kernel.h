@@ -44,4 +44,6 @@ void console_putchar(char c);
 
 void init_timer(uint32_t freq);
 
+void sleep(uint32_t msec);
+
 #endif

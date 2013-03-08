@@ -1,321 +1,226 @@
 #include <kernel.h>
+#include "pata.h"
 
-#define ATAPI_STATUS_CHECK(status, check) (((status) & (check)))
+#define insl(port, buffer, count) __asm__ ("cld; rep; insl" :: "D" (buffer), "d" (port), "c" (count))
 
-#define ATA_TIMEOUT 100000
-#define ATAPI_SECTOR_SIZE       2048
-
-#define ATA_PRIMARY_BUS         0x1F0
-#define ATA_SECONDARY_BUS       0x170
-#define ATA_PRIMARY_BUS2_BASE   0x1E8
-#define ATA_SECONDARY_BUS2_BASE 0x168
-
-#define ATA_DRIVE_MASTER        0xA0
-#define ATA_DRIVE_SLAVE         0xB0
-/*
-#define ATA_DATA          0x0000 // Read/Write
-#define ATA_ERROR         0x0001 // Read Only
-#define ATA_FEATURES      0x0001 // Write Only
-#define ATA_COUNT         0x0002 // Read/Write
-#define ATA_LOW           0x0003 // Read/Write
-#define ATA_MID           0x0004 // Read/Write
-#define ATA_HIGH          0x0005 // Read/Write
-#define ATA_DEVICE        0x0006 // Read/Write*/
-#define ATA_STATUS        0x0007 // Read
-/*
-#define ATA_COMMAND       0x0007 // Write
-//#define ATA_DCR           0x0008
-#define ATA_ALT_STATUS    0x0206 // Read
-#define ATA_DEVICE_CTRL   0x0206 // Write
-*/
-#define ATA_RESET         0x04
-
-#define ATA_BSY           0x80
-#define ATA_DRQ           0x08
-
-typedef struct ata_device {
-  short channel;
-  short drive;
-
-  short buffer[1024]; //a 1 megabyte buffer (transfer area / cache)
-
-  char serial_number[21];
-  char firmware_revision[9];
-  char model[41];
-
-  bool atapi; // Bool for atapi or not
-  bool exists;
-  bool dma;
-  bool interrupts; // Are we using interrupts
-
-  struct ata_device *next;
-
-} ata_device_t;
-
-ata_device_t ata_devices[4];
-
-typedef struct cdrom_capacity {
-    uint32_t lba;
-    uint32_t block_length;
-} cdrom_capacity_t;
-
-
-typedef struct pata_identify_info {
-    uint16_t configuration;
-    uint16_t cylinders;
-    uint16_t reserved1;
-    uint16_t heads;
-    uint16_t track_bytes;
-    uint16_t sector_bytes;
-    uint16_t sectors;
-    uint16_t reserved2[ 3 ];
-    uint8_t serial_number[ 20 ];
-    uint16_t buf_type;
-    uint16_t buf_size;
-    uint16_t ecc_bytes;
-    uint8_t revision[ 8 ];
-    uint8_t model_id[ 40 ];
-    uint8_t sectors_per_rw_long;
-    uint8_t reserved3;
-    uint16_t reserved4;
-    uint8_t reserved5;
-    uint8_t capabilities;
-    uint16_t reserved6;
-    uint8_t reserved7;
-    uint8_t pio_cycle_time;
-    uint8_t reserved8;
-    uint8_t dma;
-    uint16_t valid;
-    uint16_t current_cylinders;
-    uint16_t current_heads;
-    uint16_t current_sectors;
-    uint16_t current_capacity0;
-    uint16_t current_capacity1;
-    uint8_t sectors_per_rw_irq;
-    uint8_t sectors_per_rw_irq_valid;
-    uint32_t lba_sectors;
-    uint16_t single_word_dma_info;
-    uint16_t multi_word_dma_info;
-    uint16_t eide_pio_modes;
-    uint16_t eide_dma_min;
-    uint16_t eide_dma_time;
-    uint16_t eide_pio;
-    uint16_t eide_pio_iordy;
-    uint16_t reserved9[ 2 ];
-    uint16_t reserved10[ 4 ];
-    uint16_t command_queue_depth;
-    uint16_t reserved11[ 4 ];
-    uint16_t major;
-    uint16_t minor;
-    uint16_t command_set_1;
-    uint16_t command_set_2;
-    uint16_t command_set_features_extensions;
-    uint16_t command_set_features_enable_1;
-    uint16_t command_set_features_enable_2;
-    uint16_t command_set_features_default;
-    uint16_t ultra_dma_modes;
-    uint16_t reserved12[ 2 ];
-    uint16_t advanced_power_management;
-    uint16_t reserved13;
-    uint16_t hardware_config;
-    uint16_t acoustic;
-    uint16_t reserved14[ 5 ];
-    uint64_t lba_capacity_48;
-    uint16_t reserved15[ 22 ];
-    uint16_t last_lun;
-    uint16_t reserved16;
-    uint16_t device_lock_functions;
-    uint16_t current_set_features_options;
-    uint16_t reserved17[ 26 ];
-    uint16_t reserved18;
-    uint16_t reserved19[ 3 ];
-    uint16_t reserved20[ 96 ];
-} pata_identify_info_t;
-
-uint32_t atapi_get_capacity()
+uint8_t ide_irq_invoked = 0;
+void ide_wait_irq()
 {
-  int error;
-  uint8_t packet[12];
-  cdrom_capacity_t cdc;
-
-  memset(packet, 0, sizeof(packet));
-  packet[0] = 0x25;
-
-  //error = atapi_do_packet()
+  while (!ide_irq_invoked);
+  ide_irq_invoked = 0;
 }
 
-
-#define ATA_DATA(x)         (x)
-  #define ATA_FEATURES(x)     (x+1)
-  #define ATA_SECTOR_COUNT(x) (x+2)
-  #define ATA_ADDRESS1(x)     (x+3)
-  #define ATA_ADDRESS2(x)     (x+4)
-  #define ATA_ADDRESS3(x)     (x+5)
-  #define ATA_DRIVE_SELECT(x) (x+6)
-  #define ATA_COMMAND(x)      (x+7)
-  #define ATA_DCR(x)          (x+0x206)
-#define ATA_SELECT_DELAY(bus) \
-    {inb(ATA_DCR(bus));inb(ATA_DCR(bus));inb(ATA_DCR(bus));inb(ATA_DCR(bus));}
-
-int atapi_drive_read_sector (uint32_t bus, uint32_t drive, uint32_t lba, uint8_t *buffer)
-  {
-    /* 0xA8 is READ SECTORS command byte. */
-    uint8_t read_cmd[12] = { 0xA8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    uint8_t status;
-    int size;
-    /* Tell the scheduler that this process is using the ATA subsystem. */
-    //ata_grab ();
-    /* Select drive (only the slave-bit is set) */
-    outb (drive & (1 << 4), ATA_DRIVE_SELECT (bus));
-    ATA_SELECT_DELAY (bus);       /* 400ns delay */
-    outb (0x0, ATA_FEATURES (bus));       /* PIO mode */
-    outb (ATAPI_SECTOR_SIZE & 0xFF, ATA_ADDRESS2 (bus));
-    outb (ATAPI_SECTOR_SIZE >> 8, ATA_ADDRESS3 (bus));
-    outb (0xA0, ATA_COMMAND (bus));       /* ATA PACKET command */
-    while ((status = inb (ATA_COMMAND (bus))) & 0x80)     /* BUSY */
-      asm volatile ("pause");
-    while (!((status = inb (ATA_COMMAND (bus))) & 0x8) && !(status & 0x1))
-      asm volatile ("pause");
-    /* DRQ or ERROR set */
-    if (status & 0x1) {
-      size = -1;
-      goto cleanup;
-    }
-    read_cmd[9] = 1;              /* 1 sector */
-    read_cmd[2] = (lba >> 0x18) & 0xFF;   /* most sig. byte of LBA */
-    read_cmd[3] = (lba >> 0x10) & 0xFF;
-    read_cmd[4] = (lba >> 0x08) & 0xFF;
-    read_cmd[5] = (lba >> 0x00) & 0xFF;   /* least sig. byte of LBA */
-    /* Send ATAPI/SCSI command */
-    outws (ATA_DATA (bus), (uint16_t *) read_cmd, 6);
-    /* Wait for IRQ that says the data is ready. */
-    //schedule ();
-    /* Read actual size */
-    size =
-      (((int) inb (ATA_ADDRESS3 (bus))) << 8) |
-      (int) (inb (ATA_ADDRESS2 (bus)));
-    /* This example code only supports the case where the data transfer
-     * of one sector is done in one step. */
-    //ASSERT (size == ATAPI_SECTOR_SIZE);
-    /* Read data. */
-    kprintf("about to read data");
-    inws (ATA_DATA (bus), buffer, size / 2);
-    /* The controller will send another IRQ even though we've read all
-     * the data we want.  Wait for it -- so it doesn't interfere with
-     * subsequent operations: */
-    //schedule ();
-    /* Wait for BSY and DRQ to clear, indicating Command Finished */
-    while ((status = inb (ATA_COMMAND (bus))) & 0x88)
-      asm volatile ("pause");
-   cleanup:
-    /* Exit the ATA subsystem */
-    //ata_release ();
-    return size;
-  }
-
-
-
-void pata_send_command(uint8_t cmd, uint8_t* regs, uint8_t reg_mask)
+void ide_irq()
 {
-  // port->cmd_base == 0x170
-  // port->ctrl_base == 0x376
+  ide_irq_invoked = 0;
+}
 
-  // Select
-  outb(0xE0, 0x170 + 6);
-  inb(0x374);
+uint8_t ide_read(uint8_t channel, uint8_t reg)
+{
+  unsigned char result;
+  if (reg > 0x07 && reg < 0x0C)
+    ide_write(channel, ATA_REG_CONTROL, 0x80 | channels[channel].nIEN);
+  if (reg < 0x08)
+    result = inb(channels[channel].base + reg - 0x00);
+  else if (reg < 0x0C)
+    result = inb(channels[channel].base  + reg - 0x06);
+  else if (reg < 0x0E)
+    result = inb(channels[channel].ctrl  + reg - 0x0A);
+  else if (reg < 0x16)
+    result = inb(channels[channel].bmide + reg - 0x0E);
+  if (reg > 0x07 && reg < 0x0C)
+    ide_write(channel, ATA_REG_CONTROL, channels[channel].nIEN);
+   return result;
+}
 
-  // Wait
-  int i = 0;
+void ide_write(uint8_t channel, uint8_t reg, uint8_t data) {
+  if (reg > 0x07 && reg < 0x0C)
+    ide_write(channel, ATA_REG_CONTROL, 0x80 | channels[channel].nIEN);
+  if (reg < 0x08)
+    outb(channels[channel].base  + reg - 0x00, data);
+  else if (reg < 0x0C)
+    outb(channels[channel].base  + reg - 0x06, data);
+  else if (reg < 0x0E)
+    outb(channels[channel].ctrl  + reg - 0x0A, data);
+  else if (reg < 0x16)
+    outb(channels[channel].bmide + reg - 0x0E, data);
+  if (reg > 0x07 && reg < 0x0C)
+    ide_write(channel, ATA_REG_CONTROL, channels[channel].nIEN);
+}
+
+void ide_read_buffer(unsigned char channel, unsigned char reg, uint32_t buffer,
+                     unsigned int quads) {
+   /* WARNING: This code contains a serious bug. The inline assembly trashes ES and
+    *           ESP for all of the code the compiler generates between the inline
+    *           assembly blocks.
+    */
+   if (reg > 0x07 && reg < 0x0C)
+      ide_write(channel, ATA_REG_CONTROL, 0x80 | channels[channel].nIEN);
+   asm("pushw %es; movw %ds, %ax; movw %ax, %es");
+   if (reg < 0x08)
+      insl(channels[channel].base  + reg - 0x00, buffer, quads);
+   else if (reg < 0x0C)
+      insl(channels[channel].base  + reg - 0x06, buffer, quads);
+   else if (reg < 0x0E)
+      insl(channels[channel].ctrl  + reg - 0x0A, buffer, quads);
+   else if (reg < 0x16)
+      insl(channels[channel].bmide + reg - 0x0E, buffer, quads);
+   asm("popw %es;");
+   if (reg > 0x07 && reg < 0x0C)
+      ide_write(channel, ATA_REG_CONTROL, channels[channel].nIEN);
+}
+
+uint8_t ide_polling(uint8_t channel, uint32_t advanced_check)
+{
+  uint32_t i;
+
   for(i = 0; i < 4; i++)
-    inb(0x374);
+    ide_read(channel, ATA_REG_ALTSTATUS);
 
-  uint8_t status = inb(0x374);
-  kprintf("status = %d", status);
+  while (ide_read(channel, ATA_REG_STATUS) & ATA_SR_BSY);
 
-  for (i = 1; i < 7; i++)
-    if ( (reg_mask & ( 1 << i ) ) != 0)
-      outb(regs[i], 0x170 + i);
+  if (advanced_check)
+  {
+    uint8_t state = ide_read(channel, ATA_REG_STATUS);
 
-  outb(cmd, 0x170 + 7);
+    if (state & ATA_SR_ERR)
+      return 2; // Error
 
-  status = inb(0x374);
-  kprintf("status = %d", status);
+    if (state & ATA_SR_DF)
+      return 1; // Device Fault
+
+    if ((state & ATA_SR_DRQ) == 0)
+      return 3; // DRQ should be set
+  }
 
   return 0;
 }
 
-void pata_read_pio(void* buffer, size_t size)
-{
-  if ((size & 2) != 0)
-  {
-    inws((uint16_t*)buffer, size, 0x170 + 0);
-  }
-  else
-  {
-    inls((uint32_t*)buffer, size / 2, 0x170 + 0);
-  }
+unsigned char ide_print_error(unsigned int drive, unsigned char err) {
+   if (err == 0)
+      return err;
+
+   kprintf("IDE:");
+   if (err == 1) {kprintf("- Device Fault\n     "); err = 19;}
+   else if (err == 2) {
+      unsigned char st = ide_read(ide_devices[drive].Channel, ATA_REG_ERROR);
+      if (st & ATA_ER_AMNF)   {kprintf("- No Address Mark Found\n     ");   err = 7;}
+      if (st & ATA_ER_TK0NF)   {kprintf("- No Media or Media Error\n     ");   err = 3;}
+      if (st & ATA_ER_ABRT)   {kprintf("- Command Aborted\n     ");      err = 20;}
+      if (st & ATA_ER_MCR)   {kprintf("- No Media or Media Error\n     ");   err = 3;}
+      if (st & ATA_ER_IDNF)   {kprintf("- ID mark not Found\n     ");      err = 21;}
+      if (st & ATA_ER_MC)   {kprintf("- No Media or Media Error\n     ");   err = 3;}
+      if (st & ATA_ER_UNC)   {kprintf("- Uncorrectable Data Error\n     ");   err = 22;}
+      if (st & ATA_ER_BBK)   {kprintf("- Bad Sectors\n     ");       err = 13;}
+   } else  if (err == 3)           {kprintf("- Reads Nothing\n     "); err = 23;}
+     else  if (err == 4)  {kprintf("- Write Protected\n     "); err = 8;}
+   kprintf("- [%s %s] %s\n",
+      (const char *[]){"Primary", "Secondary"}[ide_devices[drive].Channel], // Use the channel as an index into the array
+      (const char *[]){"Master", "Slave"}[ide_devices[drive].Drive], // Same as above, using the drive
+      ide_devices[drive].Model);
+
+   return err;
 }
 
-void ata_detect()
+void ide_initialize(uint32_t BAR0, uint32_t BAR1, uint32_t BAR2, uint32_t BAR3, uint32_t BAR4)
 {
-  ata_devices[0].channel = ATA_PRIMARY_BUS;
-  ata_devices[0].drive = ATA_DRIVE_MASTER;
+  register_interrupt_handler(IRQ14, &ide_irq);
+  register_interrupt_handler(IRQ15, &ide_irq);
 
-  ata_devices[1].channel = ATA_PRIMARY_BUS;
-  ata_devices[1].drive = ATA_DRIVE_SLAVE;
+  uint32_t i, j, k, count = 0;
 
-  ata_devices[2].channel = ATA_SECONDARY_BUS;
-  ata_devices[2].drive = ATA_DRIVE_MASTER;
+  channels[ATA_PRIMARY  ].base  = (BAR0 & 0xFFFFFFFC) + 0x1F0 * (!BAR0);
+  channels[ATA_PRIMARY  ].ctrl  = (BAR1 & 0xFFFFFFFC) + 0x3F4 * (!BAR1);
+  channels[ATA_SECONDARY].base  = (BAR2 & 0xFFFFFFFC) + 0x170 * (!BAR2);
+  channels[ATA_SECONDARY].ctrl  = (BAR3 & 0xFFFFFFFC) + 0x374 * (!BAR3);
+  channels[ATA_PRIMARY  ].bmide = (BAR4 & 0xFFFFFFFC) + 0; // Bus Master IDE
+  channels[ATA_SECONDARY].bmide = (BAR4 & 0xFFFFFFFC) + 8; // Bus Master IDE
 
-  ata_devices[3].channel = ATA_SECONDARY_BUS;
-  ata_devices[3].drive = ATA_DRIVE_SLAVE;
+  ide_write(ATA_PRIMARY  , ATA_REG_CONTROL, 2);
+  ide_write(ATA_SECONDARY, ATA_REG_CONTROL, 2);
 
-  uint32_t i = 0;
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 2; i++)
   {
-    outb(ata_devices[i].channel + 0x0006, ata_devices[i].drive);
-    char status = inb(ata_devices[i].channel + ATA_STATUS);
-
-    if (!status || status == 0xFF)
+    for (j = 0; j < 2; j++)
     {
-      ata_devices[i].exists = 0;
+      kprintf("Checking %d:%d\n", i, j);
+
+      unsigned char err = 0, type = IDE_ATA, status;
+         ide_devices[count].Reserved = 0; // Assuming that no drive here.
+
+         // (I) Select Drive:
+         ide_write(i, ATA_REG_HDDEVSEL, 0xA0 | (j << 4)); // Select Drive.
+         sleep(1); // Wait 1ms for drive select to work.
+
+         // (II) Send ATA Identify Command:
+         ide_write(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+         sleep(1); // This function should be implemented in your OS. which waits for 1 ms.
+                   // it is based on System Timer Device Driver.
+
+         // (III) Polling:
+         if (ide_read(i, ATA_REG_STATUS) == 0) continue; // If Status = 0, No Device.
+
+         while(1) {
+            status = ide_read(i, ATA_REG_STATUS);
+            if ((status & ATA_SR_ERR)) {err = 1; break;} // If Err, Device is not ATA.
+            if (!(status & ATA_SR_BSY) && (status & ATA_SR_DRQ)) break; // Everything is right.
+         }
+
+
+
+         // (IV) Probe for ATAPI Devices:
+
+         if (err != 0) {
+            unsigned char cl = ide_read(i, ATA_REG_LBA1);
+            unsigned char ch = ide_read(i, ATA_REG_LBA2);
+
+            if (cl == 0x14 && ch ==0xEB)
+               type = IDE_ATAPI;
+            else if (cl == 0x69 && ch == 0x96)
+               type = IDE_ATAPI;
+            else
+               continue; // Unknown Type (may not be a device).
+
+            ide_write(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY_PACKET);
+            sleep(1);
+         }
+
+         // (V) Read Identification Space of the Device:
+         ide_read_buffer(i, ATA_REG_DATA, (uint32_t)ide_buf, 128);
+
+         // (VI) Read Device Parameters:
+         ide_devices[count].Reserved     = 1;
+         ide_devices[count].Type         = type;
+         ide_devices[count].Channel      = i;
+         ide_devices[count].Drive        = j;
+         ide_devices[count].Signature    = *((unsigned short *)(ide_buf + ATA_IDENT_DEVICETYPE));
+         ide_devices[count].Capabilities = *((unsigned short *)(ide_buf + ATA_IDENT_CAPABILITIES));
+         ide_devices[count].CommandSets  = *((unsigned int *)(ide_buf + ATA_IDENT_COMMANDSETS));
+
+         // (VII) Get Size:
+         if (ide_devices[count].CommandSets & (1 << 26))
+            // Device uses 48-Bit Addressing:
+            ide_devices[count].Size   = *((unsigned int *)(ide_buf + ATA_IDENT_MAX_LBA_EXT));
+         else
+            // Device uses CHS or 28-bit Addressing:
+            ide_devices[count].Size   = *((unsigned int *)(ide_buf + ATA_IDENT_MAX_LBA));
+
+         // (VIII) String indicates model of device (like Western Digital HDD and SONY DVD-RW...):
+         for(k = 0; k < 40; k += 2) {
+            ide_devices[count].Model[k] = ide_buf[ATA_IDENT_MODEL + k + 1];
+            ide_devices[count].Model[k + 1] = ide_buf[ATA_IDENT_MODEL + k];}
+         ide_devices[count].Model[40] = 0; // Terminate String.
+
+         count++;
+      }
     }
-    else
-    {
-      ata_devices[i].exists = 1;
-    }
-  }
-}
 
-void init_atapi()
-{
-  ata_detect();
-  uint32_t i;
-
-  for (i = 0; i < 4; i++)
-  {
-    if (ata_devices[i].exists)
-    {
-      kprintf("Found Device: %x, %x", ata_devices[i].channel, ata_devices[i].drive);
-
-      if (ata_devices[i].atapi)
-        kprintf(", ATAPI: YES");
-
-      kprintf("\n");
-    }
-  }
-
-  // Try to read a few sectors
-  //char* buf = kmalloc(2048);
-  //int read = atapi_drive_read_sector(0x170, 0xa0, 0, buf);
-
-  pata_send_command(0xA1, 0, 0);
-  pata_identify_info_t ident;
-  pata_read_pio(&ident, sizeof( pata_identify_info_t ) / 2);
-
-  char model[40];
-  memcpy(&model, (char*)ident.model_id, 40);
-  kprintf("model %s\n", model);
-
-  kprintf("sectors %d", ident.sectors);
+   // 4- Print Summary:
+   for (i = 0; i < 4; i++)
+      if (ide_devices[i].Reserved == 1) {
+         kprintf(" Found %s Drive %dB - %s\n",
+            (const char *[]){"ATA", "ATAPI"}[ide_devices[i].Type],         /* Type */
+            ide_devices[i].Size / 2,               /* Size */
+            ide_devices[i].Model);
+      }
 }
