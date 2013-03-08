@@ -1,6 +1,8 @@
 #include <kernel.h>
 
 elf_t kernel_elf;
+extern void pci_scan();
+extern void init_atapi();
 
 int kernel_main(multiboot_t *mb)
 {
@@ -19,7 +21,8 @@ int kernel_main(multiboot_t *mb)
 
   asm volatile("sti");
 
-
+  pci_scan();
+  init_atapi();
 
   for(;;);
 
