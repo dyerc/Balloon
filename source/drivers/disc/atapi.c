@@ -3,7 +3,6 @@
 
 #define insl(port, buffer, count) __asm__ ("cld; rep; insl" :: "D" (buffer), "d" (port), "c" (count))
 
-uint8_t ide_irq_invoked = 0;
 void ide_wait_irq()
 {
   while (!ide_irq_invoked);
@@ -12,7 +11,7 @@ void ide_wait_irq()
 
 void ide_irq()
 {
-  ide_irq_invoked = 0;
+  ide_irq_invoked = 1;
 }
 
 uint8_t ide_read(uint8_t channel, uint8_t reg)
@@ -122,6 +121,95 @@ unsigned char ide_print_error(unsigned int drive, unsigned char err) {
    return err;
 }
 
+uint8_t atapi_read(uint8_t drive, uint32_t lba, uint8_t numsects, uint16_t selector, uint32_t edi)
+{
+  uint32_t channel = ide_devices[drive].Channel;
+  uint32_t slavebit = ide_devices[drive].Drive;
+  uint32_t bus = channels[channel].base;
+  uint32_t words = 1024;
+  uint8_t err;
+  uint32_t i;
+
+  kprintf("Reading atapi: %d, %d, %d", drive, lba, numsects);
+
+  ide_write(channel, ATA_REG_CONTROL, channels[channel].nIEN = ide_irq_invoked = 0x0);
+
+  atapi_packet[ 0] = ATAPI_CMD_READ;
+  atapi_packet[ 1] = 0x0;
+  atapi_packet[ 2] = (lba >> 24) & 0xFF;
+  atapi_packet[ 3] = (lba >> 16) & 0xFF;
+  atapi_packet[ 4] = (lba >> 8) & 0xFF;
+  atapi_packet[ 5] = (lba >> 0) & 0xFF;
+  atapi_packet[ 6] = 0x0;
+  atapi_packet[ 7] = 0x0;
+  atapi_packet[ 8] = 0x0;
+  atapi_packet[ 9] = numsects;
+  atapi_packet[10] = 0x0;
+  atapi_packet[11] = 0x0;
+
+  ide_write(channel, ATA_REG_HDDEVSEL, slavebit << 4);
+
+  for(i = 0; i < 4; i++)
+    ide_read(channel, ATA_REG_ALTSTATUS);
+
+  ide_write(channel, ATA_REG_FEATURES, 0);
+
+  ide_write(channel, ATA_REG_LBA1, (words * 2) & 0xFF);   // Lower Byte of Sector Size.
+  ide_write(channel, ATA_REG_LBA2, (words * 2) >> 8);
+
+  ide_write(channel, ATA_REG_COMMAND, ATA_CMD_PACKET);
+
+  if (err = ide_polling(channel, 1)) return err;
+
+  asm("rep   outsw" : : "c"(6), "d"(bus), "S"(atapi_packet));
+
+  for (i = 0; i < numsects; i++) {
+    ide_wait_irq();                  // Wait for an IRQ.
+    if (err = ide_polling(channel, 1))
+       return err;      // Polling and return if error.
+    //asm("pushw %es");
+    //asm("mov %%ax, %%es"::"a"(selector));
+    //asm("rep insw"::"c"(words), "d"(bus), "D"(edi));// Receive Data.
+    //asm("popw %es");
+
+    inws((uint16_t*)ide_buf, words, bus);
+
+    edi += (words * 2);
+  }
+
+  ide_wait_irq();
+
+  while (ide_read(channel, ATA_REG_STATUS) & (ATA_SR_BSY | ATA_SR_DRQ));
+
+  return 0;
+}
+
+void read_sectors(uint8_t drive, uint8_t numsects, uint32_t lba, uint16_t es, uint32_t edi)
+{
+  if (drive > 3 || ide_devices[drive].Reserved == 0)
+    //package[0] = 0x1;
+    return;
+  else if (((lba + numsects) > ide_devices[drive].Size) && (ide_devices[drive].Type == IDE_ATA))
+    //package[0] = 0x2;
+    return;
+  else
+  {
+    unsigned char err;
+    uint32_t i;
+    if (ide_devices[drive].Type == IDE_ATA)
+       //err = ide_ata_access(ATA_READ, drive, lba, numsects, es, edi);
+      return;
+    else if (ide_devices[drive].Type == IDE_ATAPI)
+       for (i = 0; i < numsects; i++)
+          err = atapi_read(drive, lba + i, 1, es, edi + (i*2048));
+    ide_print_error(drive, err);
+
+    if (err)
+      kprintf("err: %d\n", err);
+   }
+
+}
+
 void ide_initialize(uint32_t BAR0, uint32_t BAR1, uint32_t BAR2, uint32_t BAR3, uint32_t BAR4)
 {
   register_interrupt_handler(IRQ14, &ide_irq);
@@ -218,9 +306,15 @@ void ide_initialize(uint32_t BAR0, uint32_t BAR1, uint32_t BAR2, uint32_t BAR3, 
    // 4- Print Summary:
    for (i = 0; i < 4; i++)
       if (ide_devices[i].Reserved == 1) {
-         kprintf(" Found %s Drive %dB - %s\n",
+         kprintf(" Found %s Drive[%d] %dB - %s\n",
             (const char *[]){"ATA", "ATAPI"}[ide_devices[i].Type],         /* Type */
-            ide_devices[i].Size / 2,               /* Size */
+            i,
+            ide_devices[i].Size,               /* Size */
             ide_devices[i].Model);
       }
+
+  //read_sectors(0, 1, 0x10, 0, 0);
+  atapi_read(0, 0x10, 1, 0, 0);
+  //ide_read_buffer(ide_devices[0].Channel, ATA_REG_DATA, (uint32_t)ide_buf, 1024);
+  kprintf("buf: %c", ide_buf[0]);
 }

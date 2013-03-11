@@ -3,3 +3,4 @@ timeout 5
 
 title Balloon
 kernel /boot/kernel
+module /boot/ramdisk

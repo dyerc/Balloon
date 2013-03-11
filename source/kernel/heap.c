@@ -5,6 +5,7 @@
 extern uint32_t end;
 chunk_t *first_chunk = 0;
 uint32_t placement_pointer = (uint32_t)&end;
+
 uint32_t heap_end = 0;
 
 heap_t *kernel_heap = 0;

@@ -8,8 +8,9 @@
 #include <multiboot.h>
 #include <memory.h>
 #include <elf.h>
+#include <fs.h>
 
-#define ASSERT(b) ((b) ? (void)0 : panic_assert(__FILE__, __LINE__, #b))
+#define ASSERT(b) ((b) ? (void)0 : panic(__LINE__))
 #define assert(b)
 #define spin_lock(f)
 #define spin_unlock(f)
