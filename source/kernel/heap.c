@@ -3,26 +3,36 @@
 #define HEAP_MAGIC  0xba110017;
 
 extern uint32_t end;
-chunk_t *first_chunk = 0;
 uint32_t placement_pointer = (uint32_t)&end;
 
 uint32_t heap_end = 0;
 
-heap_t *kernel_heap = 0;
+extern page_directory_t* kernel_directory;
+extern page_directory_t* current_directory;
 
-void* kmalloc(size_t size)
+uint32_t kmalloc(size_t size)
 {
   return kmalloc_raw(size, 0, 0);
 }
 
-void* kmalloc_raw(size_t size, int align, uint32_t *phys)
+uint32_t kmalloc_raw(size_t size, int align, uint32_t *phys)
 {
   if (heap_end)
   {
+    void* address;
+
     if (align)
-      return valloc(size);
+      address = valloc(size);
     else
-      return malloc(size);
+      address = malloc(size);
+
+    if (phys)
+    {
+      page_t *page = get_page((uint32_t)address, 0, kernel_directory);
+      *phys = page->frame * 0x1000 + ((uint32_t)address & 0xFFF);
+    }
+
+    return (uint32_t)address;
   }
   else
   {
@@ -39,28 +49,28 @@ void* kmalloc_raw(size_t size, int align, uint32_t *phys)
     uint32_t alloced = placement_pointer;
     placement_pointer += size;
 
-    return (void*)alloced;
+    return (uint32_t)alloced;
   }
 }
 
-void* kmalloc_aligned(size_t size)
+uint32_t kmalloc_aligned(size_t size)
 {
   return kmalloc_raw(size, 1, 0);
 }
 
-void* kmalloc_physical(size_t size, uint32_t *phys)
+uint32_t kmalloc_physical(size_t size, uint32_t *phys)
 {
   return kmalloc_raw(size, 0, phys);
 }
 
-void* kmalloc_aligned_physical(size_t size, uint32_t *phys)
+uint32_t kmalloc_aligned_physical(size_t size, uint32_t *phys)
 {
   return kmalloc_raw(size, 1, phys);
 }
 
 void kfree(void* p)
 {
-
+  free(p);
 }
 
 void init_heap()

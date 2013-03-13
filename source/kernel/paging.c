@@ -95,9 +95,10 @@ void init_paging()
   frames = (uint32_t*)kmalloc(INDEX_FROM_BIT(nframes));
   memset(frames, 0, INDEX_FROM_BIT(nframes));
 
+  uint32_t phys;
   kernel_directory = (page_directory_t*)kmalloc_aligned(sizeof(page_directory_t));
   memset(kernel_directory, 0, sizeof(page_directory_t));
-  current_directory = kernel_directory;
+  kernel_directory->physicalAddr = (uint32_t)kernel_directory->tablesPhysical;
 
   int i = 0;
   for (i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000)
@@ -116,12 +117,15 @@ void init_paging()
   register_interrupt_handler(14, &page_fault);
 
   switch_page_directory(kernel_directory);
+
+  current_directory = clone_directory(kernel_directory);
+  switch_page_directory(current_directory);
 }
 
 void switch_page_directory(page_directory_t *dir)
 {
   current_directory = dir;
-  asm volatile("mov %0, %%cr3":: "r"(&dir->tablesPhysical));
+  asm volatile("mov %0, %%cr3":: "r"(dir->physicalAddr));
   uint32_t cr0;
   asm volatile("mov %%cr0, %0": "=r"(cr0));
   cr0 |= 0x80000000; // Enable paging!
@@ -148,6 +152,25 @@ page_t* get_page(uint32_t address, int make, page_directory_t *dir)
   return 0;
 }
 
+void debug_print_directory()
+{
+  kprintf(" ---- [k:0x%x u:0x%x]\n", kernel_directory, current_directory);
+
+  uint32_t i;
+  for (i = 0; i < 1024; ++i) {
+    if (!current_directory->tables[i] || (uint32_t)current_directory->tables[i] == (uint32_t)0xFFFFFFFF) {
+      continue;
+    }
+    if (kernel_directory->tables[i] == current_directory->tables[i]) {
+      kprintf("  0x%x - kern [0x%x/0x%x] 0x%x\n", current_directory->tables[i], &current_directory->tables[i], &kernel_directory->tables[i], i * 0x1000 * 1024);
+    } else {
+      kprintf("  0x%x - user [0x%x] 0x%x [0x%x]\n", current_directory->tables[i], &current_directory->tables[i], i * 0x1000 * 1024, kernel_directory->tables[i]);
+    }
+  }
+
+  kprintf(" ---- [done]");
+}
+
 void page_fault(registers_t *r)
 {
   uint32_t cr2;
@@ -159,10 +182,12 @@ void page_fault(registers_t *r)
   int reserved = r->err_code & 0x8;     // Overwritten CPU-reserved bits of page entry?
   int id = r->err_code & 0x10;
 
-  kprintf("Page fault at 0x%x, faulting address 0x%x", r->eip, cr2);
+  kprintf("\n\n\nPage fault at 0x%x, faulting address 0x%x", r->eip, cr2);
   kprintf("present: %d\nrw: %d\nus: %d\nreserved: %d\n", present, rw, us, reserved);
 
-  ///kprint_stacktrace();
+  //debug_print_directory();
+
+  //kprint_stacktrace();
 
   //PANIC("");
   for(;;);

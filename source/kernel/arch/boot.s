@@ -31,7 +31,8 @@ mboot:
 [EXTERN kernel_main]
 
 start:
-  push    ebx
+  push esp
+  push ebx
 
   cli
   call kernel_main

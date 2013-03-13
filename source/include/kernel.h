@@ -9,6 +9,7 @@
 #include <memory.h>
 #include <elf.h>
 #include <fs.h>
+#include <task.h>
 
 #define ASSERT(b) ((b) ? (void)0 : panic(__LINE__))
 #define assert(b)

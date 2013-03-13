@@ -6,40 +6,6 @@
 
 #define KHEAP_END   0x02000000
 
-// Heap
-
-typedef struct chunk
-{
-  uint32_t magic;
-  struct chunk *next, *prev;
-  uint8_t allocated;
-  uint32_t size;
-
-} chunk_t;
-
-// Zones not currently used... future thoughts
-typedef struct
-{
-  uint32_t full;
-  chunk_t *first;
-  uint32_t offset;
-
-} zone_t;
-
-typedef struct
-{
-  chunk_t *first;
-  uint32_t start;
-  uint32_t end;
-  uint32_t max;
-
-} heap_t;
-
-void* kmalloc(size_t size);
-void kfree(void* p);
-
-void* alloc(size_t size, uint8_t page_align, heap_t *heap);
-
 void init_heap();
 
 // Paging
@@ -78,11 +44,11 @@ void page_fault(registers_t *r);
 page_t* get_page(uint32_t address, int make, page_directory_t *dir);
 void switch_page_directory(page_directory_t *dir);
 
-void* kmalloc(size_t size);
-void* kmalloc_raw(size_t size, int align, uint32_t *phys);
-void* kmalloc_aligned(size_t size);
-void* kmalloc_physical(size_t size, uint32_t *phys);
-void* kmalloc_aligned_physical(size_t size, uint32_t *phys);
+uint32_t kmalloc(size_t size);
+uint32_t kmalloc_raw(size_t size, int align, uint32_t *phys);
+uint32_t kmalloc_aligned(size_t size);
+uint32_t kmalloc_physical(size_t size, uint32_t *phys);
+uint32_t kmalloc_aligned_physical(size_t size, uint32_t *phys);
 
 void * __attribute__ ((malloc)) malloc(size_t size);
 void * __attribute__ ((malloc)) realloc(void *ptr, size_t size);

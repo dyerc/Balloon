@@ -11,6 +11,8 @@ static void timer_callback(registers_t * regs)
 
   if (tick >= wait_till)
     unlock = 1;
+
+  switch_task();
 }
 
 void sleep(uint32_t msec)
