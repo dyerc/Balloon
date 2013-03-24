@@ -95,10 +95,8 @@ void init_paging()
   frames = (uint32_t*)kmalloc(INDEX_FROM_BIT(nframes));
   memset(frames, 0, INDEX_FROM_BIT(nframes));
 
-  uint32_t phys;
   kernel_directory = (page_directory_t*)kmalloc_aligned(sizeof(page_directory_t));
   memset(kernel_directory, 0, sizeof(page_directory_t));
-  kernel_directory->physicalAddr = (uint32_t)kernel_directory->tablesPhysical;
 
   int i = 0;
   for (i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000)
@@ -107,9 +105,10 @@ void init_paging()
   i = 0;
   while(i < placement_pointer + 0x1000)
   {
-    alloc_frame(get_page(i, 1, kernel_directory), 0, 0);
+    alloc_frame(get_page(i, 1, kernel_directory), 1, 0);
     i += 0x1000;
   }
+  kernel_directory->physicalAddr = (uint32_t)kernel_directory->tablesPhysical;
 
   for (i = placement_pointer; i < KHEAP_END; i += 0x1000)
     alloc_frame(get_page(i, 1, kernel_directory), 1, 0);
@@ -171,6 +170,8 @@ void debug_print_directory()
   kprintf(" ---- [done]");
 }
 
+extern elf_t kernel_elf;
+
 void page_fault(registers_t *r)
 {
   uint32_t cr2;
@@ -182,7 +183,7 @@ void page_fault(registers_t *r)
   int reserved = r->err_code & 0x8;     // Overwritten CPU-reserved bits of page entry?
   int id = r->err_code & 0x10;
 
-  kprintf("\n\n\nPage fault at 0x%x, faulting address 0x%x", r->eip, cr2);
+  kprintf("\n\n\nPage fault at 0x%x [%s], faulting address 0x%x", r->eip, elf_lookup_symbol(r->eip, &kernel_elf), cr2);
   kprintf("present: %d\nrw: %d\nus: %d\nreserved: %d\n", present, rw, us, reserved);
 
   //debug_print_directory();

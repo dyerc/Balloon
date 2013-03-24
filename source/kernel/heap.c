@@ -21,7 +21,7 @@ uint32_t kmalloc_raw(size_t size, int align, uint32_t *phys)
   {
     void* address;
 
-    if (align)
+    if (align == 1)
       address = valloc(size);
     else
       address = malloc(size);

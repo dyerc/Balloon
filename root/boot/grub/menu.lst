@@ -2,5 +2,5 @@ default 0
 timeout 5
 
 title Balloon
-kernel /boot/kernel
+kernel /boot/kernel root=/dev/sr0
 module /boot/ramdisk

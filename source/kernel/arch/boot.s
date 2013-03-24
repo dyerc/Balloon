@@ -31,6 +31,7 @@ mboot:
 [EXTERN kernel_main]
 
 start:
+  mov esp, 0x7FFFF
   push esp
   push ebx
 

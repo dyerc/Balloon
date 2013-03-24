@@ -19,10 +19,6 @@ int kernel_main(multiboot_t *mb, uint32_t stack)
 
   init_console();
 
-  kprintf("initial_esp = %x\n\n", initial_esp);
-
-  init_timer(50);
-
   kernel_elf = elf_from_multiboot(mb);
 
   uint32_t ramdisk_end = *(uint32_t*)(multiboot->mods_addr+4);
@@ -31,6 +27,8 @@ int kernel_main(multiboot_t *mb, uint32_t stack)
   // Init memory manager
   init_paging();
   init_heap();
+
+  init_timer(50);
 
   asm volatile("sti");
 
@@ -41,9 +39,11 @@ int kernel_main(multiboot_t *mb, uint32_t stack)
 
   init_tasking();
 
+  kprintf("getpid() returned %x\n", getpid());
+
   int ret = fork();
 
-  kprintf("fork() returned %x, and getpid() returned %x", ret, getpid());
+  kprintf("fork() returned %x, and getpid() returned %x\n", ret, getpid());
 
-  return 0xba110017;
+  return 0;
 }
